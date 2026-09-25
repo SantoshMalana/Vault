@@ -1,0 +1,111 @@
+name: vault
+x-etcd: &etcd
+  image: quay.io/coreos/etcd:v3.6.5
+  restart: unless-stopped
+  networks: [storage]
+  environment:
+    ETCD_INITIAL_CLUSTER: meta1=http://meta1:2380,meta2=http://meta2:2380,meta3=http://meta3:2380
+    ETCD_INITIAL_CLUSTER_TOKEN: vault-metadata-v1
+    ETCD_INITIAL_CLUSTER_STATE: new
+    ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+    ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+    ETCD_DATA_DIR: /etcd-data
+  healthcheck:
+    test: [CMD, etcdctl, endpoint, health, --endpoints=http://127.0.0.1:2379]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+x-storage: &node
+  build: { context: ., target: service }
+  restart: unless-stopped
+  networks: [storage]
+  environment: &node-env
+    NODE_TOKEN: ${NODE_TOKEN:?Run node scripts/configure-compose.mjs first}
+    HOST: 0.0.0.0
+    PORT: 7401
+    DATA_DIR: /data
+  healthcheck:
+    test: [CMD, node, -e, "fetch('http://localhost:7401/health',{headers:{authorization:'Bearer '+process.env.NODE_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+services:
+  meta1:
+    <<: *etcd
+    command: [etcd, --name=meta1, --advertise-client-urls=http://meta1:2379, --initial-advertise-peer-urls=http://meta1:2380]
+    volumes: [meta1:/etcd-data]
+  meta2:
+    <<: *etcd
+    command: [etcd, --name=meta2, --advertise-client-urls=http://meta2:2379, --initial-advertise-peer-urls=http://meta2:2380]
+    volumes: [meta2:/etcd-data]
+  meta3:
+    <<: *etcd
+    command: [etcd, --name=meta3, --advertise-client-urls=http://meta3:2379, --initial-advertise-peer-urls=http://meta3:2380]
+    volumes: [meta3:/etcd-data]
+  n1:
+    <<: *node
+    environment: { <<: *node-env, NODE_ID: n1 }
+    volumes: [n1:/data]
+  n2:
+    <<: *node
+    environment: { <<: *node-env, NODE_ID: n2 }
+    volumes: [n2:/data]
+  n3:
+    <<: *node
+    environment: { <<: *node-env, NODE_ID: n3 }
+    volumes: [n3:/data]
+  n4:
+    <<: *node
+    environment: { <<: *node-env, NODE_ID: n4 }
+    volumes: [n4:/data]
+  n5:
+    <<: *node
+    environment: { <<: *node-env, NODE_ID: n5 }
+    volumes: [n5:/data]
+  gateway:
+    build: { context: ., target: service }
+    command: [node, services/gateway.mjs]
+    restart: unless-stopped
+    networks: [storage, frontend]
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 7400
+      DATA_DIR: /data
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Run node scripts/configure-compose.mjs first}
+      NODE_TOKEN: ${NODE_TOKEN:?Run node scripts/configure-compose.mjs first}
+      ETCD_ENDPOINTS: http://meta1:2379,http://meta2:2379,http://meta3:2379
+      STORAGE_NODES: '[{"id":"n1","url":"http://n1:7401","domain":"dev-n1"},{"id":"n2","url":"http://n2:7401","domain":"dev-n2"},{"id":"n3","url":"http://n3:7401","domain":"dev-n3"},{"id":"n4","url":"http://n4:7401","domain":"dev-n4"},{"id":"n5","url":"http://n5:7401","domain":"dev-n5"}]'
+    volumes: [gateway:/data]
+    depends_on:
+      meta1: { condition: service_healthy }
+      meta2: { condition: service_healthy }
+      meta3: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://localhost:7400/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  dashboard:
+    build: { context: ., target: dashboard }
+    restart: unless-stopped
+    networks: [frontend]
+    environment:
+      VAULT_GATEWAY_URL: http://gateway:7400
+      VAULT_COOKIE_SECURE: 'false'
+    ports: ['127.0.0.1:3000:3000']
+    depends_on:
+      gateway: { condition: service_healthy }
+networks:
+  storage: { internal: true }
+  frontend: {}
+volumes:
+  meta1: {}
+  meta2: {}
+  meta3: {}
+  n1: {}
+  n2: {}
+  n3: {}
+  n4: {}
+  n5: {}
+  gateway: {}

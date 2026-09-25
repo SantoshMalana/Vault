@@ -1,0 +1,9 @@
+node_modules
+.next
+.vault
+.npm-cache
+.env*
+.git
+work
+test-results
+*.zip
