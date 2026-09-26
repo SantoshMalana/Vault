@@ -95,6 +95,8 @@ That test starts three real etcd members and checks concurrent transactions, lea
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the consistency contract and [API.md](API.md) for integration examples.
 
+See [HARDENING.md](HARDENING.md) for session security, reverse-proxy settings, keyboard accessibility, browser regression checks and explicit remaining limits.
+
 ## Limits that remain explicit
 
 This is a tested distributed MVP, not a certification for unrestricted production workloads. Superseded objects, failed-write replicas, expired multipart data, and idempotency records are currently retained conservatively. Automatic physical garbage collection is disabled until reader/repair leases and retirement proofs are implemented; provision storage accordingly. Repair currently transfers whole object replicas, even for single-chunk corruption. Reads stage a verified full object before serving ranges, trading latency and temporary disk for integrity. Large listings and dashboard summaries scan metadata and require indexing/aggregation at high scale.

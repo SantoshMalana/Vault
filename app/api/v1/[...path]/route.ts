@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sameOrigin } from '@/services/dashboard-security.mjs'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -6,11 +7,7 @@ export const dynamic = 'force-dynamic'
 async function forward(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const token = req.cookies.get('vault_session')?.value
   if (!token) return NextResponse.json({ error: 'Sign in to your cluster.' }, { status: 401 })
-  if (
-    !['GET', 'HEAD'].includes(req.method) &&
-    req.headers.get('origin') &&
-    new URL(req.headers.get('origin')!).host !== req.headers.get('host')
-  ) {
+  if (!['GET', 'HEAD'].includes(req.method) && !sameOrigin(req)) {
     return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 })
   }
   const { path } = await params
@@ -33,6 +30,7 @@ async function forward(req: NextRequest, { params }: { params: Promise<{ path: s
       method: req.method,
       headers,
       cache: 'no-store',
+      redirect: 'error',
       signal: AbortSignal.any([req.signal, AbortSignal.timeout(180000)]),
     }
     if (!['GET', 'HEAD'].includes(req.method) && req.body) {

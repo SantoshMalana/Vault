@@ -7,14 +7,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "node scripts/start-dashboard.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.security.json",
     "lint": "eslint services scripts test app/api/session app/api/v1 components/vault/durable-dashboard.tsx",
     "format:check": "prettier --check services scripts test app/api/session app/api/v1 components/vault/durable-dashboard.tsx app/vault.css",
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "vault:dev": "node scripts/dev-cluster.mjs",
     "vault:token": "node scripts/dev-cluster.mjs --token",
     "vault:gateway": "node services/gateway.mjs",
-    "vault:node": "node services/storage.mjs"
+    "vault:node": "node services/storage.mjs",
+    "test:browser": "node --test --test-concurrency=1 test/browser/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -40,6 +41,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.6",
+    "playwright": "1.62.1",
     "postcss": "^8.5",
     "prettier": "^3.9.9",
     "tailwindcss": "^4.3.3",

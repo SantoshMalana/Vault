@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import {
@@ -102,6 +102,60 @@ function objectUrl(bucket: string, key: string) {
 }
 function Dot({ good = true }: { good?: boolean }) {
   return <span className={`vd-dot ${good ? '' : 'vd-dot-warn'}`} />
+}
+
+function Modal({
+  titleId,
+  onDismiss,
+  busy = false,
+  children,
+}: {
+  titleId: string
+  onDismiss: () => void
+  busy?: boolean
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = ref.current!
+    const previous = document.activeElement
+    dialog.showModal()
+    return () => {
+      dialog.close()
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [])
+  return (
+    <dialog
+      ref={ref}
+      className="vd-dialog"
+      aria-labelledby={titleId}
+      aria-modal="true"
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return
+        const focusable = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((element) => element.getClientRects().length > 0)
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last?.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first?.focus()
+        }
+      }}
+      onCancel={(event) => {
+        event.preventDefault()
+        if (!busy) onDismiss()
+      }}
+    >
+      {children}
+    </dialog>
+  )
 }
 
 export function DurableDashboard() {
@@ -385,6 +439,9 @@ export function DurableDashboard() {
   const sortedNodes = [...snap.nodes].sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }))
   return (
     <div className="vd-app">
+      <a className="vd-skip-link" href="#vault-main">
+        Skip to main content
+      </a>
       <aside className="vd-sidebar">
         <Link className="vd-wordmark" href="/">
           <Layers3 size={24} /> vault<span className="vd-version">02</span>
@@ -454,7 +511,7 @@ export function DurableDashboard() {
             </button>
           </div>
         </header>
-        <main className="vd-content">
+        <main className="vd-content" id="vault-main" tabIndex={-1}>
           <div className="vd-page-heading">
             <div>
               <span className="vd-eyebrow">YOUR DISTRIBUTED WORKSPACE</span>
@@ -1019,10 +1076,10 @@ export function DurableDashboard() {
         </main>
       </div>
       {upload && (
-        <div className="vd-modal-backdrop">
+        <Modal titleId="upload-title" onDismiss={() => setUpload(false)} busy={progress !== null}>
           <form className="vd-modal" onSubmit={sendFile}>
             <div className="vd-section-title">
-              <h2>Upload an object</h2>
+              <h2 id="upload-title">Upload an object</h2>
               <button
                 type="button"
                 disabled={progress !== null}
@@ -1061,15 +1118,26 @@ export function DurableDashboard() {
             </label>
             {progress !== null && (
               <div>
-                <div className="vd-progress">
+                <div
+                  className="vd-progress"
+                  role="progressbar"
+                  aria-label="Upload progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                >
                   <span style={{ width: `${progress}%` }} />
                 </div>
-                <p className="vd-muted">
+                <p className="vd-muted" role="status">
                   {progress === 100 ? 'Committing durable replicas…' : `Uploading ${progress}%`}
                 </p>
               </div>
             )}
-            {problem && <p className="vd-danger-text">{problem}</p>}
+            {problem && (
+              <p className="vd-danger-text" role="alert">
+                {problem}
+              </p>
+            )}
             <button
               className="vd-button vd-primary"
               disabled={!file || progress !== null || file.size > snap.limits.maxObjectBytes}
@@ -1082,13 +1150,13 @@ export function DurableDashboard() {
               Upload & replicate
             </button>
           </form>
-        </div>
+        </Modal>
       )}
       {detail && (
-        <div className="vd-modal-backdrop">
+        <Modal titleId="details-title" onDismiss={() => setDetail(null)}>
           <section className="vd-modal">
             <div className="vd-section-title">
-              <h2>Object details</h2>
+              <h2 id="details-title">Object details</h2>
               <button onClick={() => setDetail(null)} aria-label="Close details">
                 <X size={20} />
               </button>
@@ -1118,7 +1186,7 @@ export function DurableDashboard() {
               <ArrowDownToLine size={16} /> Download verified object
             </a>
           </section>
-        </div>
+        </Modal>
       )}
     </div>
   )

@@ -92,7 +92,9 @@ services:
     networks: [frontend]
     environment:
       VAULT_GATEWAY_URL: http://gateway:7400
-      VAULT_COOKIE_SECURE: 'false'
+      VAULT_COOKIE_SECURE: ${VAULT_COOKIE_SECURE:-false}
+      VAULT_PUBLIC_ORIGIN: ${VAULT_PUBLIC_ORIGIN:-}
+      VAULT_CLIENT_IP_HEADER: ${VAULT_CLIENT_IP_HEADER:-}
     ports: ['127.0.0.1:3000:3000']
     depends_on:
       gateway: { condition: service_healthy }
