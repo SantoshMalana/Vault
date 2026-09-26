@@ -58,6 +58,7 @@ type StoredObject = {
   createdAt: number
   contentType: string
 }
+type ObjectListing = { items: StoredObject[]; nextCursor: string | null }
 type Snapshot = {
   epoch: number
   role: string
@@ -130,23 +131,44 @@ export function DurableDashboard() {
     [pages, setPages] = useState<string[]>([])
   const [policy, setPolicy] = useState<Policy>({ name: '', n: 3, w: 2, r: 2, sloppy: false })
   const [nodeForm, setNodeForm] = useState({ id: '', url: '', domain: '' })
+  const [refreshing, setRefreshing] = useState(false)
   const activeBucket = snap?.buckets.some((b) => b.name === bucket)
     ? bucket
     : snap?.buckets[0]?.name || 'default'
+  const listingUrl = `/api/v1/objects/${encodeURIComponent(activeBucket)}?limit=50&cursor=${encodeURIComponent(cursor)}`
   const {
     data: listing,
     mutate: refreshObjects,
     error: listError,
-  } = useSWR<{ items: StoredObject[]; nextCursor: string | null }>(
-    snap
-      ? `/api/v1/objects/${encodeURIComponent(activeBucket)}?limit=50&cursor=${encodeURIComponent(cursor)}`
-      : null,
-    request,
-    { refreshInterval: 5000, shouldRetryOnError: false },
-  )
+  } = useSWR<ObjectListing>(snap ? listingUrl : null, request, {
+    refreshInterval: 5000,
+    shouldRetryOnError: false,
+  })
   const items = (listing?.items || []).filter((o) => o.key.toLowerCase().includes(search.toLowerCase()))
   const admin = snap?.role === 'admin',
     canWrite = snap?.role !== 'read'
+  async function refreshDashboard() {
+    if (refreshing) return
+    setRefreshing(true)
+    setProblem('')
+    setNotice('')
+    try {
+      // Explicit fetches report failures even when SWR retains its cached data.
+      const results = await Promise.allSettled([
+        mutate(() => request<Snapshot>('/api/v1/cluster'), { revalidate: false }),
+        refreshObjects(() => request<ObjectListing>(listingUrl), { revalidate: false }),
+        // Keep feedback visible even when a local request completes immediately.
+        new Promise<void>((resolve) => setTimeout(resolve, 450)),
+      ])
+      const failed = results.find((result) => result.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
+      setNotice('Refresh complete. Cluster and objects are up to date.')
+    } catch (e) {
+      setProblem(`Refresh failed. Some information may be out of date. ${(e as Error).message}`)
+    } finally {
+      setRefreshing(false)
+    }
+  }
   async function action(fn: () => Promise<unknown>, message: string) {
     setBusy(true)
     setProblem('')
@@ -360,6 +382,7 @@ export function DurableDashboard() {
 
   const healthy = snap.nodes.filter((n) => n.up).length,
     recovering = snap.underReplicated > 0 || snap.corruptReplicas > 0
+  const sortedNodes = [...snap.nodes].sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }))
   return (
     <div className="vd-app">
       <aside className="vd-sidebar">
@@ -462,13 +485,14 @@ export function DurableDashboard() {
             </div>
             <div className="vd-heading-actions">
               <button
-                className="vd-button"
-                onClick={() => {
-                  void mutate()
-                  void refreshObjects()
-                }}
+                className="vd-button vd-refresh"
+                onClick={refreshDashboard}
+                disabled={refreshing}
+                aria-busy={refreshing}
+                aria-label={refreshing ? 'Refreshing…' : 'Refresh'}
               >
-                <RefreshCw size={15} /> Refresh
+                <RefreshCw size={15} className={refreshing ? 'vd-refresh-spinning' : ''} aria-hidden="true" />
+                <span role="status">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
               </button>
               {tab === 'objects' && canWrite && (
                 <button className="vd-button vd-primary" onClick={() => setUpload(true)}>
@@ -494,7 +518,7 @@ export function DurableDashboard() {
             </div>
           )}
           {problem && (
-            <div className="vd-alert vd-alert-error">
+            <div className="vd-alert vd-alert-error" role="alert">
               {problem}
               <button onClick={() => setProblem('')} aria-label="Dismiss error">
                 <X size={16} />
@@ -502,7 +526,7 @@ export function DurableDashboard() {
             </div>
           )}
           {notice && (
-            <div className="vd-alert">
+            <div className="vd-alert" role="status">
               <Check size={16} />
               {notice}
               <button onClick={() => setNotice('')} aria-label="Dismiss notification">
@@ -715,7 +739,7 @@ export function DurableDashboard() {
           {tab === 'cluster' && (
             <>
               <div className="vd-node-grid">
-                {snap.nodes.map((node) => (
+                {sortedNodes.map((node) => (
                   <article className="vd-panel vd-node-card" key={node.id}>
                     <div className="vd-node-heading">
                       <span className="vd-icon-box">

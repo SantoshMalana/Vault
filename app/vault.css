@@ -1111,6 +1111,17 @@
     font-size: 7px;
   }
 }
+.vd-refresh {
+  min-width: 142px;
+}
+.vd-refresh-spinning {
+  animation: vd-refresh-spin 0.8s linear infinite;
+}
+@keyframes vd-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .vd-app * {
     transition: none !important;
