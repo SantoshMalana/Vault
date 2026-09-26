@@ -95,7 +95,7 @@ test('dashboard browser and session boundaries', { timeout: 180000 }, async (t) 
         ...process.env,
         NODE_ENV: 'production',
         VAULT_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}`,
-        VAULT_PUBLIC_ORIGIN: base,
+        VAULT_PUBLIC_ORIGIN: '',
         VAULT_COOKIE_SECURE: 'false',
         VAULT_CLIENT_IP_HEADER: '',
         VAULT_MODE: 'durable',
@@ -147,6 +147,11 @@ test('dashboard browser and session boundaries', { timeout: 180000 }, async (t) 
         data: { token },
       })
       assert.equal(login.status(), 200)
+      const alias = await page.request.post(`${base}/api/session`, {
+        headers: { host: `localhost:${port}`, origin: `http://localhost:${port}` },
+        data: {},
+      })
+      assert.equal(alias.status(), 400) // Same-origin passes; the empty token is invalid.
       assert.match(login.headers()['set-cookie'], /HttpOnly/i)
       assert.match(login.headers()['set-cookie'], /SameSite=strict/i)
       const home = await page.request.get(base)
@@ -158,8 +163,13 @@ test('dashboard browser and session boundaries', { timeout: 180000 }, async (t) 
       })
       assert.equal(rejectedWrite.status(), 403)
     })
-    await page.goto(base)
-    await page.getByRole('button', { name: 'Upload object', exact: true }).waitFor()
+    await t.test('browser sign-in works without a configured public origin', async () => {
+      await page.context().clearCookies()
+      await page.goto(base)
+      await page.getByLabel('Access token', { exact: true }).fill(token)
+      await page.getByRole('button', { name: 'Connect securely' }).click()
+      await page.getByRole('button', { name: 'Upload object', exact: true }).waitFor()
+    })
     await t.test('numeric node order and refresh success, failure and retry', async () => {
       await page.getByRole('button', { name: /^Cluster/ }).click()
       assert.deepEqual(await page.locator('.vd-node-card h3').allTextContents(), ['n1', 'n2', 'n3', 'n10'])

@@ -37,6 +37,55 @@ test('browser mutations require exact, well-formed origins and reject cross-site
   )
 })
 
+test('normalized request URLs preserve exact Host, scheme and port checks', () => {
+  const internal = 'http://localhost:3000/api/session'
+  for (const host of ['127.0.0.1:3000', 'localhost:3000', '[::1]:3000']) {
+    assert.equal(sameOrigin(request({ host, origin: `http://${host}` }, internal), {}), true)
+    assert.equal(sameOrigin(request({ host, origin: 'http://evil.example' }, internal), {}), false)
+  }
+  const host = '127.0.0.1:3000'
+  for (const origin of ['http://localhost:3000', 'http://127.0.0.1:3001', 'https://127.0.0.1:3000'])
+    assert.equal(sameOrigin(request({ host, origin }, internal), {}), false)
+  for (const badHost of [
+    'evil.example/path',
+    'user@evil.example',
+    'evil.example#fragment',
+    'evil.example\\path',
+  ])
+    assert.equal(sameOrigin(request({ host: badHost, origin: 'http://evil.example' }, internal), {}), false)
+  assert.equal(
+    sameOrigin(request({ host, origin: `http://${host}`, 'sec-fetch-site': 'cross-site' }, internal), {}),
+    false,
+  )
+  assert.equal(
+    sameOrigin(request({ host, origin: `http://${host}` }, internal), {
+      VAULT_PUBLIC_ORIGIN: 'https://vault.example',
+    }),
+    false,
+  )
+  assert.equal(
+    sameOrigin(request({ host, origin: 'https://vault.example' }, internal), {
+      VAULT_PUBLIC_ORIGIN: 'https://vault.example',
+    }),
+    true,
+  )
+  assert.equal(
+    sameOrigin(
+      request(
+        {
+          host,
+          origin: 'https://evil.example',
+          'x-forwarded-host': 'evil.example',
+          'x-forwarded-proto': 'https',
+        },
+        internal,
+      ),
+      {},
+    ),
+    false,
+  )
+})
+
 test('HTTPS sessions are secure even when an insecure cookie override is supplied', () => {
   assert.equal(secureCookie(request(), { VAULT_COOKIE_SECURE: 'false' }), true)
   const local = request({}, 'http://localhost:3000/api/session')

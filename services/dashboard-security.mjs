@@ -13,7 +13,14 @@ export function sameOrigin(req, env = process.env) {
   if (!origin) return true // Non-browser clients still require authentication.
   try {
     const supplied = new URL(origin)
-    const expected = new URL(env.VAULT_PUBLIC_ORIGIN || req.url)
+    let expected = new URL(env.VAULT_PUBLIC_ORIGIN || req.url)
+    // Next.js can normalize a loopback request URL to localhost. Compare against
+    // the requested Host authority, unless an operator pinned the public origin.
+    const host = req.headers.get('host')
+    if (!env.VAULT_PUBLIC_ORIGIN && host) {
+      if (/[\s\\/#?@]/.test(host)) return false
+      expected = new URL(`${expected.protocol}//${host}`)
+    }
     return (
       ['http:', 'https:'].includes(supplied.protocol) &&
       supplied.origin === expected.origin &&
